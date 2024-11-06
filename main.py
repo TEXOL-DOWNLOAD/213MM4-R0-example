@@ -11,31 +11,33 @@ logging.basicConfig(level=logging.INFO,  # DEBUG, INFO, WARNING, ERROR ,CRITICAL
                     format='%(asctime)s - %(levelname)s - %(message)s')
 
 class SerialCommunication:
+    # Initialize the serial communication with port and baudrate
     def __init__(self, port, baudrate):
         self.port = port
         self.baudrate = baudrate        
         self.ser = None
         
-
+    # Establish a connection to the serial port
     def connect(self):
         try:
             self.ser = serial.Serial(
                 self.port, 
                 self.baudrate,
-                bytesize=8,
-                parity=serial.PARITY_EVEN,  # Use serial.PARITY_EVEN for 'E'
-                stopbits=1,
-                timeout=5
+                bytesize=8, # 8 data bits
+                parity=serial.PARITY_EVEN,  # Use even parity for error checking
+                stopbits=1, # 1 stop bit
+                timeout=5 # Timeout in seconds for read operations
             )
             logging.info(f"Connected to {self.port} at {self.baudrate} baud.")
         except serial.SerialException as e:
             logging.error(f"Error connecting to serial port: {e}")
-
+    
     def close(self):
         if self.ser is not None:
             self.ser.close()
             logging.info("Serial port closed.")        
 
+    # Write data to the serial port
     def write(self, data: bytes):
         if self.ser is not None:
             try:
@@ -47,11 +49,12 @@ class SerialCommunication:
         else:
             logging.warning("Serial port is not open.")    
 
-    def read_until(self,length_size: int) -> bytes: 
+    # Read data from the serial port until a complete message is received
+    def read_until(self,lengthBytes: int = False) -> bytes: 
         if self.ser is not None: 
             try:
-                start_byte = b'\x5B' # Hexadecimal for '['
-                stop_byte = b'\x5D'  # Hexadecimal for ']' b'\x5D'
+                start_byte = b'\x5B' # Hexadecimal for '[' (start byte)
+                stop_byte = b'\x5D'  # Hexadecimal for ']' (stop byte)
                 
                 response = bytearray()
                 start_found = False
@@ -59,45 +62,24 @@ class SerialCommunication:
                 command_length = 0
 
                 while True:
+                    # Look for the start byte in the response
                     if not start_found:                        
                         if not self._find_start_byte(response,start_byte):   
                             logging.error("Read start byte timed out.")
                             return b''  # Return empty bytes on timeout                         
                             
-                        logging.debug(f"Response message start_byte: {response.hex().upper()}")
-                        '''
-                        while True:
-                            if self.ser.in_waiting > 0:
-                                byte = self.ser.read(1)  # Read one byte at a time
-                                if byte == start_byte:
-                                    response.extend(byte)
-                                    start_found = True
-                                    break
-                        '''
-                        
+                        logging.debug(f"Response message start_byte: {response.hex().upper()}")   
 
+                    # Read the command length
                     if not length_found:
-                        command_length = self._read_command_length(length_size,response)
+                        command_length = self._read_command_length(len_lengthByte,response)
                         if command_length is None:
                             logging.error("Read command length timed out.")
                             return b''  # Return empty bytes on timeout 
                         
-                        logging.debug(f"Response message command_length: {response.hex().upper()}")
-                        '''
-                        while True:
-                            if self.ser.in_waiting >= length_size:
-                                byte = self.ser.read(length_size)  # Read one byte at a time
-                                response.extend(byte)
-                                length_found = True
+                        logging.debug(f"Response message command_length: {response.hex().upper()}")                              
 
-                                if length_size == 1:                                                            
-                                    command_length = response[1]  # Get command length
-                                else:                            
-                                    command_length = int.from_bytes(response[1:3], byteorder='big')  # Get command length
-                                                                
-                                break
-                        '''          
-
+                    # Continue reading until the complete message is received
                     byte = self.ser.read(command_length-len(response))
                     if byte and len(byte) == command_length-len(response):
                        response.extend(byte)
@@ -106,47 +88,43 @@ class SerialCommunication:
                         return b''  # Return empty bytes on timeout 
                     
                     logging.debug(f"Response message: {response.hex().upper()}")
-                    '''
-                    while True:
-                        if self.ser.in_waiting >= command_length-len(response):
-                            byte = self.ser.read(command_length-len(response))
-                            
-                            break
-                    '''
-                    
-                    
 
+                    # Check if the response ends with the stop byte and verify CRC
                     if  response[-1] == stop_byte[0]:
                         crc_expected = self._crc16(response[:-3])
                         crc_got = response[-3:-1]
 
                         if crc_expected == crc_got:
-                            return bytes(response)
-                            # break  # Found the stop byte, exit loop
+                            return bytes(response) # Return the valid response                            
                         else:
                             logging.error(f"checksum: expected {crc_expected.hex().upper()},got {crc_got.hex().upper()}")
-                            return b''  # Return empty bytes on timeout
+                            return b''  # Return empty bytes if checksum mismatch
                     
+                    # If stop byte is not found.
+                    # If start byte is found, start reading the rest of the message
                     if start_byte in response:
                         start_found = True
                         start_index = response.index(start_byte)
                         response = response[start_index:]  # Keep from the start byte onward  
-                        
-                        if len(response) >= length_size+1: 
-                            length_found = True
-                            if length_size == 1:
-                                command_length = response[1]  # Update command length
+
+                        # Update command length
+                        if not lengthBytes: 
+                            # Command length (1 byte)                            
+                            if len(response) >= 1+1: 
+                                length_found = True
+                                command_length = response[1]
                             else:
-                                command_length = int.from_bytes(response[1:3], byteorder='big')
+                                length_found = False 
                         else:
-                            length_found = False
-                    
+                            # Command length (2 bytes)
+                            if len(response) >= 2+1: 
+                                length_found = True
+                                command_length = int.from_bytes(response[1:3], byteorder='big')
+                            else:
+                                length_found = False 
                     else:
                         start_found = False
                         length_found = False
-
-                #logging.error("Read operation timed out.")
-                #return b''  # Return empty bytes on timeout
             
             except Exception as e:
                 logging.error(f"Error reading from serial port: {e}")
@@ -156,8 +134,7 @@ class SerialCommunication:
             logging.warning("Serial port is not open.")
             return b''     
 
-    def _find_start_byte(self, response: bytearray,start_byte: bytes) -> bool:
-        #start_byte = b'\x5B' # Hexadecimal for '['
+    def _find_start_byte(self, response: bytearray,start_byte: bytes) -> bool:        
         while True: 
             byte = self.ser.read(1)
             if byte:                
@@ -167,15 +144,14 @@ class SerialCommunication:
             else:                
                 return False # Return False if no byte is read
     
-    def _read_command_length(self, length_size: int, response: bytearray) -> int:        
-        # if self.ser.in_waiting >= length_size:
-        byte = self.ser.read(length_size)
+    def _read_command_length(self, len_lengthByte: int, response: bytearray) -> int:               
+        byte = self.ser.read(len_lengthByte)
         if byte:
             response.extend(byte)
-            if length_size == 1:
-                return response[1]  # Command length
+            if len_lengthByte == 1:
+                return response[1]  # Command length (1 byte)
             else:
-                return int.from_bytes(response[1:3], byteorder='big')
+                return int.from_bytes(response[1:3], byteorder='big') # Command length (2 bytes)
             
         return None  # Not enough bytes read yet
     
@@ -191,6 +167,7 @@ class SerialCommunication:
                     crc >>= 1
         return crc.to_bytes(2, byteorder='little')
     
+    # Prepare the command to send, including headers, payload, and checksum
     def _combined_send_command(self,payload: bytes)-> bytearray:
         cmd = bytearray([0x53,0x53,0x00])
         stop_bytes = bytes([0x53, 0x54])
@@ -200,28 +177,35 @@ class SerialCommunication:
         cmd.extend(self._crc16(cmd))
         cmd.extend(stop_bytes)
 
-        return cmd
+        return cmd # Return the complete command to send
     
     
 
 class InstructionSet:
     def __init__(self, SerialCommunication):
+        """
+        Initializes the InstructionSet class with a SerialCommunication object.
+        
+        Args:
+            SerialCommunication (SerialCommunication): An instance of the SerialCommunication class 
+                                                        used for sending and receiving data over serial.
+        """
         self.serial_comm = SerialCommunication
 
     def start_data_capture(self, mode: str, bandWidth: int, length: int, unit: int, trigger: int = None) -> tuple:
         """
-        Starts data capture mode (either continuous or trigger).
+        Starts the data capture in either continuous or trigger mode.
 
         Args:
-            mode (str): The mode of capture ("continuous" or "trigger").
-            bandWidth (U8): The bandwidth for data capture ("NAN", "1K", "1.25K", "1.667K", "2.5K", "5K", "10K")
-            length (U8): The duration (Sec) of the capture
-            unit (int): The unit of measurement for the capture (0x00 : acceleration, 0x01 : velocity).
-            trigger (int, optional): Trigger value for trigger mode. (scale: 0.001)
+            mode (str): Capture mode, either "continuous" or "trigger".
+            bandWidth (U8): Bandwidth for the capture (1: 1K, 2: 1.25K, 3: 1.667K, 4: 2.5K, 5: 5K, 6: 10K)
+            length (U8): Duration of the capture in seconds.
+            unit (int): Unit for the measurement (0x00 for acceleration, 0x01 for velocity).
+            trigger (int, optional): Trigger value for trigger mode (only applicable in "trigger" mode). (scale: 0.001)
 
         Returns:
-            tuple: A tuple containing an size array, and data, 
-                or None values on failure.
+            tuple: A tuple containing the data size array and captured data (if successful), 
+                   or None values in case of failure.
         """
         if self.serial_comm is None:
             logging.error("Error: Serial communication not initialized.")
@@ -260,23 +244,39 @@ class InstructionSet:
             return None, None  # Return None values on exception
     
     def cmd_continuous_mode_start(self, bandWidth: int, length: int, unit: int) -> bool:
+        """
+        Starts the data capture in continuous mode.
+        
+        Args:
+            bandWidth (int): The bandwidth for the capture.
+            length (int): Duration of the capture in seconds.
+            unit (int): The unit of measurement (acceleration or velocity).
+        
+        Returns:
+            bool: True if the command was successful, False otherwise.
+        """
         try:
             logging.debug("Run cmd_continuous_mode_start")
-            cmd = bytes([0xBA, 0x45])
-            length_size = 1
+
+            # Command identifier for starting continuous mode
+            cmd = bytes([0xBA, 0x45])            
             
-            # Construct the payload            
+            # Construct the payload for the continuous mode start command            
             payload = bytearray(cmd )+ bytes([bandWidth, length, unit])         
             
             logging.debug(f"Send message: {payload.hex().upper()}")
-            self.serial_comm.write(bytes(payload))
-            
-            # MCU Response
+            self.serial_comm.write(payload)
+
+            # Define a length size for response, which could be adjusted based on expected response format
+            len_lengthByte = 1
+            retries = 5  # Set a retry limit for response handling
+            # Wait for response from MCU
             while True:
                 response = self.serial_comm.read_until(length_size)
                 if response:
                     logging.debug(f"Response message: {response.hex().upper()}")
 
+                    # Extract the command from the response and compare
                     cmd_got = response[1+length_size:1+length_size+2]
                     if cmd_got != cmd:
                         # The instructions are different, re-fetch the reply
@@ -284,12 +284,12 @@ class InstructionSet:
                         continue                    
                                     
                     # Get the current status from the response
+                    # Check if the operation status is OK
                     current_status = response[4]
                     logging.debug(f"Current status: {current_status}")
                     status_string = ["OK", "Wrong band width or length.", "Fail"]
                     logging.info(f"Continuous mode start cmd status: {self._status_display_string(current_status, status_string)}")
 
-                    # Check if the status is OK
                     return current_status == 0x00
                 else:
                     return False
@@ -299,26 +299,36 @@ class InstructionSet:
             return False
         
     def cmd_trigger_mode_start(self,bandWidth: int,length: int,unit: int,trigger: int)->bool:
+        """
+        Starts the data capture in trigger mode, where the capture occurs based on a trigger value.
+        
+        Args:
+            bandWidth (int): The bandwidth for the capture.
+            length (int): Duration of the capture in seconds.
+            unit (int): The unit of measurement (acceleration or velocity).
+            trigger (int): The trigger value for capture start (scaled by 0.001).
+        
+        Returns:
+            bool: True if the command was successful, False otherwise.
+        """
         try:
             logging.debug("Run cmd_trigger_mode_start")
             cmd = bytes([0xA9, 0x56])
             length_size = 1
             
-            # Construct the payload            
+            # Construct the payload for the trigger mode start command            
             payload = bytearray(cmd) + bytes([bandWidth, length, unit])+trigger.to_bytes(2, byteorder='big')            
-            #bytes([bandWidth, length, unit])
-            #payload.extend(trigger.to_bytes(2, byteorder='big'))
             
-
             logging.debug(f"Send message: {payload.hex().upper()}")
             self.serial_comm.write(bytes(payload))        
             
-            # MCU Response
+            # Wait for response from MCU
             while True:
                 response = self.serial_comm.read_until(length_size)
                 if response:
                     logging.debug(f"Response message: {response.hex().upper()}")
 
+                    # Extract the command from the response and compare
                     cmd_got = response[1+length_size:1+length_size+2]
                     if cmd_got != cmd:
                         # The instructions are different, re-fetch the reply
@@ -326,12 +336,12 @@ class InstructionSet:
                         continue                    
                                     
                     # Get the current status from the response
+                    # Check if the operation status is OK
                     current_status = response[4]
                     logging.debug(f"Current status: {current_status}")
                     status_string = ["OK", "Wrong band width or length.", "Fail"]
                     logging.info(f"Trigger mode start cmd status: {self._status_display_string(current_status, status_string)}")
 
-                    # Check if the status is OK
                     return current_status == 0x00
                 else:
                     return False
@@ -341,24 +351,30 @@ class InstructionSet:
             return False
         
     def cmd_interrupt_mode(self)->bool:
+        """
+        Interrupts the current data capture mode and stops the operation.
+        
+        Returns:
+            bool: True if the command was successful, False otherwise.
+        """
         try:
-
             logging.debug("Interrupt capture")
             cmd = bytes([0x98, 0x67])
             length_size = 1
             
-            # Construct the payload            
+            # Construct the interrupt mode command            
             payload = bytearray(cmd)            
 
             logging.debug(f"Send message: {payload.hex().upper()}")
             self.serial_comm.write(bytes(payload))
 
-            # MCU Response
+            # Wait for response from MCU
             while True:
                 response = self.serial_comm.read_until(length_size)
                 if response:
                     logging.debug(f"Response message: {response.hex().upper()}")
 
+                    # Extract the command from the response and compare
                     cmd_got = response[1+length_size:1+length_size+2]
                     if cmd_got != cmd:
                         # The instructions are different, re-fetch the reply
@@ -366,12 +382,12 @@ class InstructionSet:
                         continue                    
                                     
                     # Get the current status from the response
+                    # Check if the operation status is OK
                     current_status = response[4]
                     logging.debug(f"Current status: {current_status}")
                     status_string = ["OK", "Fail"]
                     logging.info(f"Interrupt mode cmd status: {self._status_display_string(current_status, status_string)}")
 
-                    # Check if the status is OK
                     return current_status == 0x00
                 else:
                     return False
@@ -381,23 +397,30 @@ class InstructionSet:
             return False
         
     def cmd_read_operation_status(self)->int:
+        """
+        Reads the operation status of the device (e.g., idle, in progress, completed).
+        
+        Returns:
+            int: The current status code (e.g., 0x02 for completed).
+        """
         try:
             logging.debug("Run cmd_read_operation_status")
             cmd = bytes([0x87, 0x78])
             length_size = 1
             
-            # Construct the payload            
+            # Construct the read status command            
             payload = bytearray(cmd)
 
             logging.debug(f"Send message: {payload.hex().upper()}")
             self.serial_comm.write(bytes(payload))
             
-            # MCU Response
+            # Wait for response from MCU
             while True:
                 response = self.serial_comm.read_until(length_size)
                 if response:
                     logging.debug(f"Response message: {response.hex().upper()}")
 
+                    # Extract the command from the response and compare
                     cmd_got = response[1+length_size:1+length_size+2]
                     if cmd_got != cmd:
                         # The instructions are different, re-fetch the reply
@@ -410,7 +433,6 @@ class InstructionSet:
                     status_string = ["Idle", "In Progress", "Completed","Wait for Trigger", "Fail"]
                     logging.info(f"Read operation status cmd status: {self._status_display_string(current_status, status_string)}")
 
-                    # Check if the status is OK
                     return current_status
                 else:
                     return None
@@ -421,16 +443,17 @@ class InstructionSet:
         
     def cmd_read_operation_details(self) -> tuple:
         """
+        Reads the details of the current operation (e.g., bandwidth, length, data size array).
+        
         Returns:
-            tuple: A tuple containing a success flag, part number, data size array,
-                or None values on failure.
+            tuple: A tuple containing the status of the operation, part number, and data size array.
         """
         try:
             logging.debug("Run cmd_read_operation_details")
             cmd = bytes([0x78, 0x89])
             length_size = 1
             
-            # Construct the payload            
+            # Construct the read operation details command         
             payload = bytearray(cmd)
 
             logging.debug(f"Send message: {payload.hex().upper()}")
