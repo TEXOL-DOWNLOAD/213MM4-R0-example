@@ -1,6 +1,4 @@
-# InstructionSet
-
-The InstructionSet class provides for controlling a data capture system via serial communication. It supports continuous and trigger-based data capture, and includes functionality for reading operation statuses, raw data, and other capture details.
+# 213MM4-R0-example
 
 ## Features
 **Continuous Mode**: Capture data continuously for a specified duration and bandwidth.
@@ -9,6 +7,18 @@ The InstructionSet class provides for controlling a data capture system via seri
 ## Usage
 ### 1.Importing the Class
 You can copy the class **SerialCommunication** and **InstructionSet** in your code.
+
+#### SerialCommunication Class
+The **SerialCommunication** class is used to establish a connection to the serial port, send commands, and read data from the connected hardware device.
+ˋˋˋbash
+class SerialCommunication:  
+ˋˋˋ
+
+#### InstructionSet Class
+The **InstructionSet** class interacts with the **SerialCommunication** class to control the data capture system. It includes methods to start data capture, read operation statuses, and retrieve raw data.
+ˋˋˋbash
+class InstructionSet:
+ˋˋˋ
 
 To use the InstructionSet, you need to create an instance of it, passing an initialized SerialCommunication instance to the constructor.
 ```bash
