@@ -57,9 +57,9 @@ class SerialCommunication:
                 stop_byte = b'\x5D'  # Hexadecimal for ']' (stop byte)
                 
                 response = bytearray() # Initialize an empty response                               
-                command_length = 0
-
-                while True:
+                command_length = 0  
+                
+                while True:                    
                     # Look for the start byte in the response
                     if not response: # If response is empty, start looking for the start byte                        
                         if not self._find_start_byte(response,start_byte):   
@@ -636,6 +636,136 @@ class InstructionSet:
         except Exception as e:
             logging.error(f"Read Raw Data Fragment Error: {e}")
             return None
+        
+    def cmd_read_temperature(self)->tuple:
+        """
+        Reads the temperature of the device.
+        
+        Returns:
+            float: The temperature in degrees Celsius.
+            If there's an error or mismatch, returns None.
+        """
+        # Check if serial communication is initialized
+        if self.serial_comm is None:
+            logging.error("Error: Serial communication not initialized.")
+            return None
+                
+        try:
+            logging.info("Run cmd_read_temperature")
+            cmd = bytes([0x34, 0xCD])
+
+            logging.debug(f"Send message: {cmd.hex().upper()}")
+            self.serial_comm.write(cmd) # Send the command over serial
+
+            retries = 2  # Set a retry limit for response handling
+            while retries > 0:
+                # Wait for response from MCU
+                response = self.serial_comm.read_until()
+                if response:
+                    logging.debug(f"Response Payload: {response.hex().upper()}")
+
+                    cmd_got = response[:2] # Get the first two bytes of the response as the command
+                    if cmd_got != cmd:
+                        # If the command doesn't match, log the error and return failure
+                        logging.error(f"Cmd mismatch: expected {cmd.hex().upper()},got {cmd_got.hex().upper()}")
+                        return None
+                    
+                    temperature = int.from_bytes(response[2:2 + 4], byteorder='big')*0.001 
+
+                    return temperature                   
+                    
+                else:
+                    return None              
+                
+        except Exception as e:
+            logging.error(f"Read Temperature Error: {e}")
+            return None   
+
+    def cmd_read_sensor_id(self)->tuple:
+        """
+        Reads the sensor ID of the device.
+    
+        Returns:
+            string: The sensor ID as a string.
+            If there's an error or mismatch, returns None.
+        """
+        # Check if serial communication is initialized
+        if self.serial_comm is None:
+            logging.error("Error: Serial communication not initialized.")
+            return None
+                
+        try:
+            logging.info("Run cmd_read_sensor_id")
+            cmd = bytes([0x61, 0x9A])
+
+            logging.debug(f"Send message: {cmd.hex().upper()}")
+            self.serial_comm.write(cmd) # Send the command over serial
+
+            retries = 2  # Set a retry limit for response handling
+            while retries > 0:
+                # Wait for response from MCU
+                response = self.serial_comm.read_until()
+                if response:
+                    logging.debug(f"Response Payload: {response.hex().upper()}")
+
+                    cmd_got = response[:2] # Get the first two bytes of the response as the command
+                    if cmd_got != cmd:
+                        # If the command doesn't match, log the error and return failure
+                        logging.error(f"Cmd mismatch: expected {cmd.hex().upper()},got {cmd_got.hex().upper()}")
+                        return None
+                    
+                    sensor_id = response[2:2 + 6].decode('ascii')
+                    return sensor_id
+                    
+                else:
+                    return None              
+                
+        except Exception as e:
+            logging.error(f"Read SensorID Error: {e}")
+            return None
+
+    def cmd_read_firmware_version(self)->tuple:
+        """
+        Reads the firmware version of the device.
+    
+        Returns:
+            string: The firmware version as a string in hexadecimal format.
+            If there's an error or mismatch, returns None.
+        """
+        # Check if serial communication is initialized
+        if self.serial_comm is None:
+            logging.error("Error: Serial communication not initialized.")
+            return None
+                
+        try:
+            logging.info("Run cmd_read_firmware_version")
+            cmd = bytes([0x45, 0xBC])
+
+            logging.debug(f"Send message: {cmd.hex().upper()}")
+            self.serial_comm.write(cmd) # Send the command over serial
+
+            retries = 2  # Set a retry limit for response handling
+            while retries > 0:
+                # Wait for response from MCU
+                response = self.serial_comm.read_until()
+                if response:
+                    logging.debug(f"Response Payload: {response.hex().upper()}")
+
+                    cmd_got = response[:2] # Get the first two bytes of the response as the command
+                    if cmd_got != cmd:
+                        # If the command doesn't match, log the error and return failure
+                        logging.error(f"Cmd mismatch: expected {cmd.hex().upper()},got {cmd_got.hex().upper()}")
+                        return None
+                    
+                    version = f"{response[2:2+4].hex().upper()}"
+                    return version
+                    
+                else:
+                    return None              
+                
+        except Exception as e:
+            logging.error(f"Read Firmware Version Error: {e}")
+            return None       
     
     # Returns a string representation of a status based on the index and display list.
     def _status_display_string(self,index: int, display: List[str]) -> str:        
@@ -681,22 +811,37 @@ if __name__ == "__main__":
     
     instruction_set = InstructionSet(serial_comm)
     
-    try:         
-        mode = "trigger"
-        bandWidth = 1
+    try:  
+
+        mode = "continuous"
+        # mode = "trigger"
+        bandWidth = 6
         length = 2
         unit = 0
-        trigger = int(2*1000)
+        # trigger = 0.5
         
-        data_size, captured_data=instruction_set.start_data_capture(mode,bandWidth,length,unit,trigger)
+        data_size, captured_data=instruction_set.start_data_capture(mode,bandWidth,length,unit)
+        # data_size, captured_data=instruction_set.start_data_capture(mode,bandWidth,length,unit,int(trigger*1000))
         
         if data_size:
             logging.info("Data capture successful")
             with open('output.csv', mode='w', newline='') as file:
                 writer = csv.writer(file)
                 writer.writerows(captured_data)
-        else:
+        else: 
             logging.info("Data capture unsuccessful")    
+        
+        '''# Read Temperature
+        temperature = instruction_set.cmd_read_temperature()
+        logging.info(f"Temperature: {temperature}")
+        
+        # Read sensor_id
+        sensor_id = instruction_set.cmd_read_sensor_id()
+        logging.info(sensor_id) 
+
+        version = instruction_set.cmd_read_firmware_version()
+        logging.info(version)'''
+        
 
     except KeyboardInterrupt:
         print("Stopped by user.")
