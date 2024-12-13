@@ -6,6 +6,17 @@
 
 * **Trigger Mode**: Capture data based on a trigger value.
 
+## Prerequisites
+
+- Python 3.x
+- `pyserial` library for serial communication
+- A device connected to a serial port (e.g., `COM1` on Windows or `/dev/ttyUSB0` on Linux)
+
+You can install `pyserial` via pip if you don't have it installed yet:
+```bash
+pip install pyserial
+```
+
 ## Installation
 
 Clone this repo into your `code` directory:
@@ -15,11 +26,14 @@ mkdir code
 git clone https://github.com/TEXOL-DOWNLOAD/213MM4-R0-example.git code
 ```
 
+
 ## Usage
 
 ### 1.Importing the Class
 
 To use the `InstructionSet`, you need to create an instance of it, passing an initialized `SerialCommunication` instance to the constructor.
+
+If you're working on a Windows system, the serial port would likely be `COM1` (or another COM port such as `COM2`, `COM3`, etc., depending on the configuration of your system).
 
 ```bash
 # Create SerialCommunication instance (replace with actual parameters)
@@ -84,6 +98,33 @@ if success:
     print("Data capture interrupted successfully.")
 else:
     print("Failed to interrupt data capture.")
+```
+
+### 5. Read Temperature
+
+To read the current temperature from the device:
+
+```bash
+temperature = instruction_set.cmd_read_temperature()
+logging.info(f"Temperature: {temperature}")
+```
+
+### 6. Read Sensor ID
+
+To read the sensor ID from the device:
+
+```bash
+sensor_id = instruction_set.cmd_read_sensor_id()
+logging.info(f"Sensor ID: {sensor_id}")
+```
+
+### 5. Read Firmware Version
+
+To read the firmware version of the device:
+
+```bash
+version = instruction_set.cmd_read_firmware_version()
+logging.info(f"Firmware Version: {version}")
 ```
 
 
