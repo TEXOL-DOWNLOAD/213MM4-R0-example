@@ -806,18 +806,18 @@ class InstructionSet:
 
 # Example usage
 if __name__ == "__main__":
-    serial_comm = SerialCommunication(port='/dev/ttyUSB0', baudrate=115200)    
+    # If you're working on a Windows system, the serial port would likely be COM1 (or another COM port such as COM2, COM3, etc., depending on the configuration of your system).
+    serial_comm = SerialCommunication(port='/dev/ttyUSB0', baudrate=115200)
     serial_comm.connect()     
     
     instruction_set = InstructionSet(serial_comm)
     
     try:  
 
-        mode = "continuous"
-        # mode = "trigger"
+        mode = "continuous" # or "trigger"
         bandWidth = 6
         length = 2
-        unit = 0
+        unit = 0x00
         # trigger = 0.5
         
         data_size, captured_data=instruction_set.start_data_capture(mode,bandWidth,length,unit)
@@ -839,6 +839,7 @@ if __name__ == "__main__":
         sensor_id = instruction_set.cmd_read_sensor_id()
         logging.info(sensor_id) 
 
+        # Read firmware version
         version = instruction_set.cmd_read_firmware_version()
         logging.info(version)'''
         
