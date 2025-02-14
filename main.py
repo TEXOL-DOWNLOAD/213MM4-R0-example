@@ -14,7 +14,7 @@ class SerialCommunication:
     # Initialize the serial communication with port and baudrate
     def __init__(self, port, baudrate):
         self.port = port
-        self.baudrate = baudrate        
+        self.baudrate = baudrate         
         self.ser = None
         
     # Establish a connection to the serial port
@@ -24,7 +24,8 @@ class SerialCommunication:
                 self.port, 
                 self.baudrate,
                 bytesize=8, # 8 data bits
-                parity=serial.PARITY_EVEN,  # Use even parity for error checking
+                parity=serial.PARITY_NONE, # For fw version 1006
+                # parity = serial.PARITY_EVEN  # For fw version 1005                 
                 stopbits=1, # 1 stop bit
                 timeout=5 # Set timeout for read operations to 5 seconds
             )

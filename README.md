@@ -135,3 +135,20 @@ logging.info(f"Firmware Version: {version}")
 sudo dmesg | grep tty
 sudo chmod 777 /dev/ttyUSB0
 ```
+
+## Serial Connection Setup
+
+The **parity setting** is based on the firmware version:
+
+- **Firmware Version 1006**: Use `serial.PARITY_NONE`.
+- **Firmware Version 1005**: Use `serial.PARITY_EVEN`.
+
+**Important**: To change the parity setting based on your firmware version, manually modify the `parity` in the `connect` method, depending on the firmware version of your device.
+
+### Example:
+
+```python
+# Modify parity manually based on your firmware version
+parity = serial.PARITY_NONE  # For fw version 1006
+# parity = serial.PARITY_EVEN  # For fw version 1005
+
